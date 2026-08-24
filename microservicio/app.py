@@ -1,5 +1,6 @@
 import asyncio
 import hmac
+import logging
 import os
 import re
 import unicodedata
@@ -16,6 +17,7 @@ INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY", "")
 CEDULA_PATTERN = re.compile(r"^\d{6,10}$")
 NO_PENDIENTES = "NO TIENE ASUNTOS PENDIENTES CON LAS AUTORIDADES JUDICIALES"
 PENDIENTES = "ACTUALMENTE NO ES REQUERIDO POR AUTORIDAD JUDICIAL"
+logger = logging.getLogger("nulltrace.antecedentes")
 
 
 class Resultado(BaseModel):
@@ -129,9 +131,13 @@ async def ejecutar_consulta(browser: Browser, cedula: str) -> Resultado:
     try:
         await page.goto(PORTAL_URL, timeout=PORTAL_TIMEOUT_MS, wait_until="domcontentloaded")
 
-        aceptar = page.locator("#aceptaOption\\:0, input[id='aceptaOption:0']").first
+        aceptar = page.locator("label[for='aceptaOption:0']").first
         if await aceptar.count():
-            await aceptar.check(force=True)
+            # PrimeFaces actualiza el radio y el botón mediante AJAX. Hacer
+            # check() directamente sobre el input falla cuando el DOM se
+            # vuelve a renderizar; el clic sobre la etiqueta visible sí
+            # dispara el evento valueChange oficial.
+            await aceptar.click()
 
         continuar = page.locator("#continuarBtn, button[id='continuarBtn'], input[value*='Enviar']").first
         if await continuar.count():
@@ -192,12 +198,14 @@ async def consultar_antecedentes(
         try:
             return await ejecutar_consulta(app.state.browser, cedula)
         except (PlaywrightTimeoutError, PlaywrightError):
+            logger.exception("Fallo de Playwright durante la consulta")
             return Resultado(
                 estado="portal_no_disponible",
                 cedula=cedula,
                 mensaje="El portal oficial no respondió correctamente. Intenta de nuevo más tarde.",
             )
         except Exception:
+            logger.exception("Fallo inesperado durante la consulta")
             return Resultado(
                 estado="portal_no_disponible",
                 cedula=cedula,
