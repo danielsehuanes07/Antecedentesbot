@@ -104,6 +104,17 @@ No se integran servicios de resolución automática de CAPTCHA. Para una automat
 
 Antes de publicar, confirma que `.env` no aparezca en `git status` y que el token de Telegram no esté escrito en ningún archivo. Luego:
 
+Al crear el repositorio desde la web de GitHub usa, por ejemplo:
+
+- **Repository name:** `AntecedentesBot` o `nulltrace-antecedentes`.
+- **Description:** `Bot de Telegram para consultar antecedentes judiciales de Colombia con n8n, FastAPI, Playwright, Docker y ngrok.`
+- **Visibility:** Public.
+- **Add README:** Off.
+- **Add .gitignore:** No `.gitignore`.
+- **License:** None por ahora, hasta decidir bajo qué condiciones podrán reutilizar el código.
+
+El README y `.gitignore` deben quedar desactivados en el formulario porque ya existen en este proyecto. Así se evita crear un historial remoto incompatible con el commit local.
+
 ```bash
 git init -b main
 git add .

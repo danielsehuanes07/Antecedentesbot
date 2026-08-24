@@ -1,4 +1,28 @@
+# Secretos y configuraciones locales
 .env
+.env.*
+!.env.example
+
+# Python y pruebas
 __pycache__/
 .pytest_cache/
 *.py[cod]
+
+# Editores y sistema operativo
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs, cobertura y archivos temporales
+*.log
+.coverage
+htmlcov/
+coverage.xml
+tmp/
+*.tmp
+
+# Exportaciones locales de n8n; solo se versiona el flujo sanitizado
+n8n_data/
+n8n/backups/
+n8n/credentials*.json
