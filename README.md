@@ -30,16 +30,17 @@ Edita `.env` y completa:
 
 - `NGROK_DOMAIN`: tu dominio reservado, sin `https://`.
 - `NGROK_AUTHTOKEN`: token de tu cuenta ngrok.
-- `N8N_ENCRYPTION_KEY`: una clave larga que no debes cambiar después.
-- `INTERNAL_API_KEY`: otra clave larga y distinta para la comunicación n8n → API.
+- `INTERNAL_API_KEY`: una clave larga para la comunicación n8n → API.
 
-Puedes generarlas con:
+Puedes generarla con:
 
 ```bash
 openssl rand -hex 32
 ```
 
 No reutilices ni publiques el token actual de tu bot. El archivo `.env` está excluido de Git.
+
+n8n genera su propia clave de cifrado y la guarda dentro del volumen persistente `n8n_data`. Conserva ese volumen para no perder acceso a las credenciales; si migras a otro equipo, exporta los workflows y vuelve a crear allí las credenciales.
 
 ## 2. Levantar contenedores
 
