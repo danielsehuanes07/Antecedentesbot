@@ -1,0 +1,73 @@
+services:
+  n8n:
+    image: n8nio/n8n:2.6.4
+    container_name: nulltrace-antecedentes-n8n
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5679:5678"
+    environment:
+      WEBHOOK_URL: "https://${NGROK_DOMAIN}/"
+      N8N_HOST: "${NGROK_DOMAIN}"
+      N8N_PROTOCOL: https
+      N8N_PORT: 5678
+      N8N_ENCRYPTION_KEY: "${N8N_ENCRYPTION_KEY}"
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_PERSONALIZATION_ENABLED: "false"
+      N8N_SECURE_COOKIE: "true"
+      GENERIC_TIMEZONE: "${GENERIC_TIMEZONE:-America/Bogota}"
+      TZ: "${TZ:-America/Bogota}"
+      INTERNAL_API_KEY: "${INTERNAL_API_KEY}"
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./n8n:/workflows:ro
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - backend
+      - tunnel
+
+  api:
+    build:
+      context: ./microservicio
+    container_name: nulltrace-antecedentes-api
+    restart: unless-stopped
+    init: true
+    ports:
+      - "127.0.0.1:5001:5000"
+    environment:
+      INTERNAL_API_KEY: "${INTERNAL_API_KEY}"
+      PORTAL_TIMEOUT_MS: "60000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health', timeout=3)"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks:
+      - backend
+      - outbound
+
+  ngrok:
+    image: ngrok/ngrok:3
+    container_name: nulltrace-antecedentes-ngrok
+    restart: unless-stopped
+    command: ["http", "--url=https://${NGROK_DOMAIN}", "n8n:5678"]
+    environment:
+      NGROK_AUTHTOKEN: "${NGROK_AUTHTOKEN}"
+    depends_on:
+      - n8n
+    ports:
+      - "127.0.0.1:4040:4040"
+    networks:
+      - tunnel
+
+networks:
+  backend:
+    internal: true
+  outbound:
+  tunnel:
+
+volumes:
+  n8n_data:
