@@ -49,6 +49,8 @@ docker compose up -d --build
 docker compose ps
 ```
 
+Este primer comando inicia solamente n8n y la API. ngrok queda detenido para que nadie pueda registrar la cuenta administradora de n8n antes que tú.
+
 Servicios locales:
 
 - n8n: http://localhost:5679
@@ -64,6 +66,14 @@ La primera vez, abre n8n localmente y crea la cuenta propietaria antes de usar e
 3. Crea una credencial **Telegram API** con el token entregado por BotFather.
 4. Asigna esa misma credencial a estos cinco nodos: `Telegram Trigger`, `Mensaje de inicio`, `Mensaje de espera`, `Enviar resultado` y `Formato inválido`.
 5. Guarda y activa/publica el workflow.
+
+Cuando la cuenta propietaria, la credencial y el workflow estén listos, inicia el túnel:
+
+```bash
+docker compose --profile tunnel up -d ngrok
+```
+
+Comprueba la URL pública en `http://localhost:4040` y prueba `/start` en Telegram.
 
 Telegram registrará el webhook usando `https://TU_DOMINIO_NGROK/`. Un mismo bot solo puede tener un webhook activo: usa un bot nuevo si deseas mantener el NullTrace original funcionando al mismo tiempo.
 
@@ -90,7 +100,7 @@ No uses una cédula real en pruebas sin autorización. La respuesta esperada nor
 ## Apagar
 
 ```bash
-docker compose down
+docker compose --profile tunnel down
 ```
 
 Esto conserva los datos de n8n. `docker compose down -v` también elimina el volumen y no debe usarse si quieres conservar la configuración.
