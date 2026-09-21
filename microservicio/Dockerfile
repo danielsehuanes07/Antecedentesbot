@@ -11,7 +11,7 @@ RUN pip install --no-cache-dir -r requirements.txt \
     && playwright install --with-deps chromium \
     && rm -rf /var/lib/apt/lists/*
 
-COPY app.py .
+COPY app.py captcha.py ./
 
 RUN useradd --create-home --uid 10001 appuser \
     && chown -R appuser:appuser /app /ms-playwright

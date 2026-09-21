@@ -11,9 +11,14 @@ from fastapi import Depends, FastAPI, Header, HTTPException
 from playwright.async_api import Browser, Error as PlaywrightError, TimeoutError as PlaywrightTimeoutError, async_playwright
 from pydantic import BaseModel
 
+from captcha import CaptchaError, solve_page
+
 PORTAL_URL = "https://antecedentes.policia.gov.co:7005/WebJudicial/index.xhtml"
 PORTAL_TIMEOUT_MS = int(os.getenv("PORTAL_TIMEOUT_MS", "60000"))
 INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY", "")
+CAPSOLVER_API_KEY = os.getenv("CAPSOLVER_API_KEY", "").strip()
+CAPSOLVER_TIMEOUT_SECONDS = min(180, max(1, int(os.getenv("CAPSOLVER_TIMEOUT_SECONDS", "120"))))
+CONSULTA_TIMEOUT_SECONDS = 240
 CEDULA_PATTERN = re.compile(r"^\d{6,10}$")
 NO_PENDIENTES = "NO TIENE ASUNTOS PENDIENTES CON LAS AUTORIDADES JUDICIALES"
 PENDIENTES = "ACTUALMENTE NO ES REQUERIDO POR AUTORIDAD JUDICIAL"
@@ -31,6 +36,7 @@ class Resultado(BaseModel):
     cedula: str
     mensaje: str
     resultado: str | None = None
+    motivo: str | None = None
     fuente: str = PORTAL_URL
 
 
@@ -117,7 +123,33 @@ async def captcha_visible(page) -> bool:
     return False
 
 
-async def ejecutar_consulta(browser: Browser, cedula: str) -> Resultado:
+def verificacion_requerida(cedula: str, motivo: str) -> Resultado:
+    mensajes = {
+        "sin_configuracion": "La resolución automática no está configurada. Contacta al administrador del bot.",
+        "proveedor_no_disponible": "El servicio de resolución no pudo completar el CAPTCHA. Intenta más tarde.",
+        "verificacion_no_confirmada": "El portal no confirmó la verificación automática. Intenta más tarde.",
+    }
+    return Resultado(
+        estado="verificacion_requerida",
+        cedula=cedula,
+        motivo=motivo,
+        mensaje=mensajes[motivo],
+    )
+
+
+async def esperar_resultado(page, timeout: float = 20) -> str | None:
+    deadline = asyncio.get_running_loop().time() + timeout
+    while True:
+        texto = await texto_resultado(page)
+        if texto:
+            return texto
+        if asyncio.get_running_loop().time() >= deadline:
+            return None
+        # The CAPTCHA can remain in the DOM while the submission is in flight.
+        await page.wait_for_timeout(250)
+
+
+async def ejecutar_intento(browser: Browser, cedula: str) -> Resultado:
     context = await browser.new_context(
         locale="es-CO",
         user_agent=(
@@ -150,25 +182,24 @@ async def ejecutar_consulta(browser: Browser, cedula: str) -> Resultado:
         await cedula_input.fill(cedula)
         await page.wait_for_timeout(1000)
 
-        # El portal oficial suele exigir reCAPTCHA. No se intenta evadirlo.
         if await captcha_visible(page):
-            return Resultado(
-                estado="verificacion_requerida",
-                cedula=cedula,
-                mensaje=(
-                    "El portal oficial exige completar la verificación 'No soy un robot'. "
-                    "Abre el enlace oficial para finalizar la consulta personalmente."
-                ),
-            )
+            if not CAPSOLVER_API_KEY:
+                return verificacion_requerida(cedula, "sin_configuracion")
+            try:
+                await solve_page(page, CAPSOLVER_API_KEY, CAPSOLVER_TIMEOUT_SECONDS)
+            except (CaptchaError, PlaywrightError):
+                logger.warning("consulta: proveedor_no_disponible")
+                return verificacion_requerida(cedula, "proveedor_no_disponible")
 
         consultar = page.locator(
             "button[type='submit'], input[type='submit'], button:has-text('Consultar')"
         ).first
         await consultar.click()
-        await page.wait_for_timeout(2500)
-
-        texto = await texto_resultado(page)
+        texto = await esperar_resultado(page)
         if not texto:
+            if await captcha_visible(page):
+                logger.warning("consulta: verificacion_no_confirmada")
+                return verificacion_requerida(cedula, "verificacion_no_confirmada")
             return Resultado(
                 estado="resultado_no_reconocido",
                 cedula=cedula,
@@ -186,6 +217,17 @@ async def ejecutar_consulta(browser: Browser, cedula: str) -> Resultado:
         await context.close()
 
 
+async def ejecutar_consulta(browser: Browser, cedula: str) -> Resultado:
+    # At most two paid tasks, in fresh sessions, within the endpoint's total budget.
+    for intento in range(2):
+        resultado = await ejecutar_intento(browser, cedula)
+        if resultado.motivo != "verificacion_no_confirmada" or not CAPSOLVER_API_KEY:
+            return resultado
+        if intento == 0:
+            logger.info("consulta: reintento de verificacion con sesion nueva")
+    return resultado
+
+
 @app.get("/consultar/antecedentes/{cedula}", response_model=Resultado)
 async def consultar_antecedentes(
     cedula: str,
@@ -194,20 +236,22 @@ async def consultar_antecedentes(
     if not CEDULA_PATTERN.fullmatch(cedula):
         raise HTTPException(status_code=422, detail="La cédula debe contener entre 6 y 10 dígitos")
 
-    async with app.state.semaforo:
-        try:
-            return await ejecutar_consulta(app.state.browser, cedula)
-        except (PlaywrightTimeoutError, PlaywrightError):
-            logger.exception("Fallo de Playwright durante la consulta")
-            return Resultado(
-                estado="portal_no_disponible",
-                cedula=cedula,
-                mensaje="El portal oficial no respondió correctamente. Intenta de nuevo más tarde.",
-            )
-        except Exception:
-            logger.exception("Fallo inesperado durante la consulta")
-            return Resultado(
-                estado="portal_no_disponible",
-                cedula=cedula,
-                mensaje="No fue posible completar la consulta en este momento.",
-            )
+    # Include queue time in the budget so n8n always receives a response.
+    try:
+        async with asyncio.timeout(CONSULTA_TIMEOUT_SECONDS):
+            async with app.state.semaforo:
+                return await ejecutar_consulta(app.state.browser, cedula)
+    except (TimeoutError, PlaywrightTimeoutError, PlaywrightError):
+        logger.warning("Tiempo agotado o fallo del navegador durante la consulta")
+        return Resultado(
+            estado="portal_no_disponible",
+            cedula=cedula,
+            mensaje="El portal oficial no respondió correctamente. Intenta de nuevo más tarde.",
+        )
+    except Exception:
+        logger.warning("Fallo inesperado durante la consulta")
+        return Resultado(
+            estado="portal_no_disponible",
+            cedula=cedula,
+            mensaje="No fue posible completar la consulta en este momento.",
+        )
