@@ -39,6 +39,8 @@ services:
     environment:
       INTERNAL_API_KEY: "${INTERNAL_API_KEY}"
       PORTAL_TIMEOUT_MS: "60000"
+      CAPSOLVER_API_KEY: "${CAPSOLVER_API_KEY:-}"
+      CAPSOLVER_TIMEOUT_SECONDS: "${CAPSOLVER_TIMEOUT_SECONDS:-120}"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health', timeout=3)"]
       interval: 20s

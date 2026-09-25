@@ -105,4 +105,4 @@ No uses `docker compose down -v`: la opción `-v` elimina las cuentas, credencia
 
 ## Resultado actual
 
-El bot recibe la cédula y avanza hasta el reCAPTCHA del portal oficial. Cuando aparece, entrega el enlace para completar la verificación personalmente.
+El bot recibe la cédula y consulta el portal oficial. Puedes activar la resolución opcional de reCAPTCHA v2 añadiendo `CAPSOLVER_API_KEY` a `.env` y ejecutando `docker compose up -d --build api`. La cuenta necesita saldo. Configura el timeout del nodo `Consultar antecedentes` en 270000 ms si usas un flujo anterior. Consulta la sección «CapSolver opcional» del README. Sin clave o si ambos intentos fallan, el bot informa que la consulta automática no pudo completarse.

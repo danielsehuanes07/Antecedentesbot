@@ -2,9 +2,12 @@
 
 Versión independiente de NullTrace enfocada únicamente en la consulta de antecedentes judiciales de Colombia. Incluye FastAPI + Playwright, n8n, Telegram y ngrok en contenedores separados.
 
-> Importante: el portal oficial de la Policía Nacional puede exigir reCAPTCHA. Este proyecto **no evade CAPTCHA**. Cuando aparece, el bot entrega el enlace oficial para que la persona termine la consulta de forma manual.
+> Importante: el portal oficial de la Policía Nacional puede exigir reCAPTCHA. Puedes configurar CapSolver para intentar resolver reCAPTCHA v2 automáticamente. Sin clave o si falla, el bot informa que no pudo completar la consulta automática.
 
 ## Estructura
+
+Para continuar en Windows conservando la cuenta, credenciales y workflow publicado,
+sigue [Migración a Windows](MIGRACION_WINDOWS.md). Un `git clone` por sí solo no copia los datos de n8n.
 
 ```text
 Nulltrace-Antecedentes/
@@ -109,7 +112,7 @@ Esto conserva los datos de n8n. `docker compose down -v` también elimina el vol
 
 La consulta oficial está destinada a validar información personal. Usa el bot únicamente con consentimiento o base legal aplicable, limita quién puede acceder al bot y no almacenes resultados más tiempo del necesario. Esta herramienta no reemplaza la certificación ni la interpretación de la Policía Nacional.
 
-No se integran servicios de resolución automática de CAPTCHA. Para una automatización completa debe obtenerse una interfaz o autorización oficial del organismo responsable.
+CapSolver es opcional y no garantiza que el portal acepte el token. La integración cubre reCAPTCHA v2 (incluido Enterprise); otros desafíos se informan como consulta automática no completada.
 
 ## Publicar en GitHub
 
@@ -136,3 +139,28 @@ gh repo create nulltrace-antecedentes --public --source=. --remote=origin --push
 El último comando requiere tener GitHub CLI instalado y haber ejecutado previamente `gh auth login`. También puedes crear un repositorio vacío desde GitHub y seguir las instrucciones que muestra para conectar el remoto.
 
 Tu compañero podrá clonar el repositorio, crear su propio `.env` desde `.env.example` y configurar su propia credencial de Telegram. No debe recibir una copia de tus secretos.
+
+## CapSolver opcional
+
+La API resuelve el CAPTCHA dentro de la misma sesión de Playwright. No necesitas instalar un nodo de CapSolver en n8n: Telegram → n8n → API → CapSolver → portal → Telegram. Se usa la [API oficial de CapSolver](https://docs.capsolver.com/en/guide/captcha/ReCaptchaV2/).
+
+1. Crea una cuenta con saldo y guarda la clave **solo en tu `.env` local**:
+
+   ```env
+   CAPSOLVER_API_KEY=tu-clave
+   CAPSOLVER_TIMEOUT_SECONDS=120
+   ```
+
+2. Aplica la configuración:
+
+   ```bash
+   docker compose up -d --build api
+   ```
+
+3. En un workflow existente, configura `Consultar antecedentes` → `Options` → `Timeout` en **270000 ms** y guarda/publica. El archivo `n8n/workflow.json` ya incluye ese valor.
+
+Sin clave no se hacen solicitudes a CapSolver. Cada consulta crea como máximo dos tareas pagadas: si no se confirma la verificación tras esperar la respuesta, se reintenta una vez en una sesión nueva. Los errores del proveedor no se reintentan. Los fallos de saldo, credenciales, resolución o aceptación del token devuelven un aviso de consulta no completada, sin indicar que el usuario deba resolver el CAPTCHA manualmente. El plazo del proveedor se limita a 180 segundos; la consulta completa, incluida la espera de turno, tiene un presupuesto de 240 segundos.
+
+Se envían al proveedor la URL sin parámetros y los parámetros del CAPTCHA, sin el número de cédula, resultados ni cookies de la sesión. No se registran claves, tokens ni respuestas del proveedor en logs. Para desactivar la integración, deja `CAPSOLVER_API_KEY=` vacío y vuelve a ejecutar el comando de actualización.
+
+Se verificó la aceptación del token en una consulta autorizada; el portal puede presentar fallos intermitentes y no se garantiza cada intento. Las pruebas automatizadas usan páginas y respuestas simuladas, sin consultar datos personales ni consumir créditos.
