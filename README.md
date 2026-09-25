@@ -8,6 +8,8 @@ Versión independiente de NullTrace enfocada únicamente en la consulta de antec
 
 Para continuar en Windows conservando la cuenta, credenciales y workflow publicado,
 sigue [Migración a Windows](MIGRACION_WINDOWS.md). Un `git clone` por sí solo no copia los datos de n8n.
+Para empezar con otra cuenta de n8n y otro dominio ngrok, sigue
+[Windows con cuenta nueva](WINDOWS_CUENTA_NUEVA.md).
 
 ```text
 Nulltrace-Antecedentes/

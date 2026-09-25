@@ -1,5 +1,8 @@
 # Continuar en Windows con la misma cuenta y configuración
 
+Si quieres **otra cuenta de n8n y otro dominio de ngrok**, sigue
+[Windows con cuenta nueva](WINDOWS_CUENTA_NUEVA.md) y no restaures esta copia.
+
 El repositorio contiene el código y el workflow de plantilla. La cuenta de n8n,
 las credenciales de Telegram, el workflow publicado y las ejecuciones están en
 el volumen `n8n_data`. Para conservarlos necesitas también la copia privada.
